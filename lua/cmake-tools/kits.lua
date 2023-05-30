@@ -5,13 +5,21 @@ function kits.parse()
   -- helper function to find the config file
   -- returns file path if found, nil otherwise
   local function findcfg()
-    local files = vim.fn.readdir(".")
-    local file = nil
-    for _, f in ipairs(files) do -- iterate over files in current directory
-      if (f == "cmake-kits.json" or f == "CMakeKits.json") then -- if a kits config file is found
-        file = vim.fn.resolve("./" .. f)
-        break
+    local get_kit = function(dir)
+      local files = vim.fn.readdir(dir)
+      local file = nil
+      for _, f in ipairs(files) do -- iterate over files in current directory
+        if f == "cmake-kits.json" or f == "CMakeKits.json" then -- if a kits config file is found
+          file = vim.fn.resolve(dir .. "/" .. f)
+          break
+        end
       end
+      return file
+    end
+    local file = get_kit(".")
+    if not file then
+      -- nvim-data/project_nivm/cmake
+      file = get_kit(vim.fn.stdpath("data") .. "/project_nvim/cmake")
     end
 
     return file

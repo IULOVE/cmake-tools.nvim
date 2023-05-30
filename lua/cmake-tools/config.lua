@@ -4,6 +4,7 @@ local Result = require("cmake-tools.result")
 -- local utils = require("cmake-tools.utils") -- Fails lua check. Uncomment this for testing
 local Types = require("cmake-tools.types")
 local variants = require("cmake-tools.variants")
+local utils = require("cmake-tools.utils")
 
 local Config = {
   build_directory = nil,
@@ -32,25 +33,16 @@ end
 
 function Config:update_build_dir(build_dir)
   self.build_directory = Path:new(build_dir)
-  self.query_directory = Path:new(
-    build_dir,
-    ".cmake",
-    "api",
-    "v1",
-    "query"
-  )
-  self.reply_directory = Path:new(
-    build_dir,
-    ".cmake",
-    "api",
-    "v1",
-    "reply"
-  )
+  self.query_directory = Path:new(build_dir, ".cmake", "api", "v1", "query")
+  self.reply_directory = Path:new(build_dir, ".cmake", "api", "v1", "reply")
 end
 
 function Config:generate_build_directory()
-  local build_directory = Path:new(vim.loop.cwd(), self.build_directory)
-
+  --fix windows mkdir
+  local build_directory = Path:new(
+    vim.loop.cwd(),
+    utils.iswin32 and string.gsub(self.build_directory.filename, "/", "\\") or self.build_directory
+  )
   if not build_directory:mkdir({ parents = true }) then
     return Result:new(Types.CANNOT_CREATE_DIRECTORY, false, "cannot create directory")
   end
@@ -83,10 +75,7 @@ function Config:get_codemodel_targets()
     return Result:new(Types.NOT_CONFIGURED, nil, "Configure fail")
   end
 
-  local found_files = scandir.scan_dir(
-    reply_directory.filename,
-    { search_pattern = "codemodel*" }
-  )
+  local found_files = scandir.scan_dir(reply_directory.filename, { search_pattern = "codemodel*" })
   if #found_files == 0 then
     return Result:new(Types.CANNOT_FIND_CODEMODEL_FILE, nil, "Unable to find codemodel file")
   end
