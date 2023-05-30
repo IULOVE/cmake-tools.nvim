@@ -53,9 +53,8 @@ function cmake.generate(opt, callback)
   if presets_file and config.configure_preset then
     -- if exsist preset file and set configure preset, then
     -- set build directory to the `binaryDir` option of `configurePresets`
-    local build_directory = presets.get_build_dir(
-      presets.get_preset_by_name(config.configure_preset, "configurePresets")
-    )
+    local build_directory =
+      presets.get_build_dir(presets.get_preset_by_name(config.configure_preset, "configurePresets"))
     if build_directory ~= "" then
       config:update_build_dir(build_directory)
     end
@@ -78,7 +77,7 @@ function cmake.generate(opt, callback)
       end,
       cmake_console_position = const.cmake_console_position,
       cmake_show_console = const.cmake_show_console,
-      cmake_console_size = const.cmake_console_size
+      cmake_console_size = const.cmake_console_size,
     })
   end
 
@@ -132,7 +131,7 @@ function cmake.generate(opt, callback)
     end,
     cmake_console_position = const.cmake_console_position,
     cmake_show_console = const.cmake_show_console,
-    cmake_console_size = const.cmake_console_size
+    cmake_console_size = const.cmake_console_size,
   })
 end
 
@@ -157,7 +156,7 @@ function cmake.clean(callback)
     end,
     cmake_console_position = const.cmake_console_position,
     cmake_show_console = const.cmake_show_console,
-    cmake_console_size = const.cmake_console_size
+    cmake_console_size = const.cmake_console_size,
   })
 end
 
@@ -204,7 +203,8 @@ function cmake.build(opt, callback)
     vim.list_extend(args, fargs)
   end
 
-  return utils.run(const.cmake_command, {}, args, {
+  local kit_option = kits.build_env_and_args(config.kit)
+  return utils.run(const.cmake_command, kit_option.env, args, {
     on_success = function()
       if type(callback) == "function" then
         callback()
@@ -212,7 +212,7 @@ function cmake.build(opt, callback)
     end,
     cmake_console_position = const.cmake_console_position,
     cmake_show_console = const.cmake_show_console,
-    cmake_console_size = const.cmake_console_size
+    cmake_console_size = const.cmake_console_size,
   })
 end
 
@@ -287,8 +287,8 @@ function cmake.install(opt)
 
   return utils.run(const.cmake_command, {}, args, {
     cmake_console_position = const.cmake_console_position,
-    cmake_show_console     = const.cmake_show_console,
-    cmake_console_size     = const.cmake_console_size
+    cmake_show_console = const.cmake_show_console,
+    cmake_console_size = const.cmake_console_size,
   })
 end
 
@@ -321,9 +321,10 @@ function cmake.run(opt, callback)
     return cmake.generate({ bang = false, fargs = utils.deepcopy(opt.fargs) }, function()
       cmake.run(opt, callback)
     end)
-  elseif result_code == Types.NOT_SELECT_LAUNCH_TARGET
-      or result_code == Types.NOT_A_LAUNCH_TARGET
-      or result_code == Types.NOT_EXECUTABLE
+  elseif
+    result_code == Types.NOT_SELECT_LAUNCH_TARGET
+    or result_code == Types.NOT_A_LAUNCH_TARGET
+    or result_code == Types.NOT_EXECUTABLE
   then
     -- Re Select a target that could launch
     return cmake.select_launch_target(function()
@@ -341,7 +342,7 @@ function cmake.run(opt, callback)
         -- print("TARGET", target_path)
         local target_path = result.data
         local is_win32 = vim.fn.has("win32")
-        if (is_win32 == 1) then
+        if is_win32 == 1 then
           -- Prints the output in the same cmake window as in wsl/linux
           local new_s = getPath(target_path, "/")
           -- print(getPath(target_path,sep))
@@ -350,7 +351,7 @@ function cmake.run(opt, callback)
             cmake_launch_path = new_s,
             cmake_console_position = const.cmake_console_position,
             cmake_console_size = const.cmake_console_size,
-            cmake_launch_args = cmake:get_launch_args()
+            cmake_launch_args = cmake:get_launch_args(),
           })
         else
           -- print("target_path: " .. target_path)
@@ -360,7 +361,7 @@ function cmake.run(opt, callback)
             cmake_launch_path = new_s,
             cmake_console_position = const.cmake_console_position,
             cmake_console_size = const.cmake_console_size,
-            cmake_launch_args = cmake:get_launch_args()
+            cmake_launch_args = cmake:get_launch_args(),
           })
         end
       end)
@@ -373,8 +374,8 @@ function cmake.launch_args(opt)
     return
   end
 
-  if (cmake.get_launch_target() ~= nil) then
-    config.launch_args[cmake.get_launch_target()] = utils.deepcopy(opt.fargs);
+  if cmake.get_launch_target() ~= nil then
+    config.launch_args[cmake.get_launch_target()] = utils.deepcopy(opt.fargs)
   end
 end
 
@@ -401,9 +402,10 @@ if has_nvim_dap then
       return cmake.generate({ bang = false, fargs = utils.deepcopy(opt.fargs) }, function()
         cmake.debug(opt, callback)
       end)
-    elseif result_code == Types.NOT_SELECT_LAUNCH_TARGET
-        or result_code == Types.NOT_A_LAUNCH_TARGET
-        or result_code == Types.NOT_EXECUTABLE
+    elseif
+      result_code == Types.NOT_SELECT_LAUNCH_TARGET
+      or result_code == Types.NOT_A_LAUNCH_TARGET
+      or result_code == Types.NOT_EXECUTABLE
     then
       -- Re Select a target that could launch
       return cmake.select_launch_target(function()
@@ -520,30 +522,28 @@ function cmake.select_configure_preset(callback)
   local presets_file = presets.check()
   if presets_file then
     local configure_preset_names = presets.parse("configurePresets", { include_hidden = false })
-    local configure_presets = presets.parse_name_mapped("configurePresets", { include_hidden = false })
+    local configure_presets =
+      presets.parse_name_mapped("configurePresets", { include_hidden = false })
     local format_preset_name = function(p_name)
       local p = configure_presets[p_name]
       return p.displayName or p.name
     end
-    vim.ui.select(configure_preset_names,
-      {
-        prompt = "Select cmake configure presets",
-        format_item = format_preset_name
-      },
-      function(choice)
-        if not choice then
-          return
-        end
-        if config.configure_preset ~= choice then
-          config.configure_preset = choice
-          config.build_type = presets.get_build_type(
-            presets.get_preset_by_name(choice, "configurePresets")
-          )
-        end
-        if type(callback) == "function" then
-          callback()
-        end
-      end)
+    vim.ui.select(configure_preset_names, {
+      prompt = "Select cmake configure presets",
+      format_item = format_preset_name,
+    }, function(choice)
+      if not choice then
+        return
+      end
+      if config.configure_preset ~= choice then
+        config.configure_preset = choice
+        config.build_type =
+          presets.get_build_type(presets.get_preset_by_name(choice, "configurePresets"))
+      end
+      if type(callback) == "function" then
+        callback()
+      end
+    end)
   else
     utils.error("Cannot find CMake[User]Presets.json at Root!!")
   end
@@ -567,7 +567,9 @@ function cmake.select_build_preset(callback)
       local p = build_presets[p_name]
       return p.displayName or p.name
     end
-    vim.ui.select(build_preset_names, { prompt = "Select cmake build presets", format_item = format_preset_name },
+    vim.ui.select(
+      build_preset_names,
+      { prompt = "Select cmake build presets", format_item = format_preset_name },
       function(choice)
         if not choice then
           return
@@ -578,7 +580,8 @@ function cmake.select_build_preset(callback)
         if type(callback) == "function" then
           callback()
         end
-      end)
+      end
+    )
   else
     utils.error("Cannot find CMake[User]Presets.json at Root!!")
   end
@@ -667,7 +670,7 @@ function cmake.get_launch_target()
 end
 
 function cmake.get_launch_args()
-  if (cmake.get_launch_target() == nil) then
+  if cmake.get_launch_target() == nil then
     return nil
   end
   return config.launch_args[cmake.get_launch_target()]
@@ -710,7 +713,9 @@ function cmake.configure_compile_commands()
 end
 
 function cmake.compile_commands_from_soft_link()
-  if config.build_directory == nil or const.lsp_type ~= nil then return end
+  if config.build_directory == nil or const.lsp_type ~= nil then
+    return
+  end
 
   local source = config.build_directory.filename .. "/compile_commands.json"
   local destination = vim.loop.cwd() .. "/compile_commands.json"
@@ -720,7 +725,9 @@ function cmake.compile_commands_from_soft_link()
 end
 
 function cmake.compile_commands_from_preset()
-  if config.build_directory == nil or const.lsp_type == nil then return end
+  if config.build_directory == nil or const.lsp_type == nil then
+    return
+  end
 
   local buf = vim.api.nvim_get_current_buf()
   local clients = vim.lsp.get_active_clients({ name = const.lsp_type })
@@ -760,21 +767,19 @@ end
 -- preload the autocmd if the following option is true. only saves cmakelists.txt files
 if const.cmake_regenerate_on_save == true then
   vim.api.nvim_create_autocmd("BufWritePre", {
-    group    = vim.api.nvim_create_augroup("cmaketools", { clear = true }),
-    pattern  = "CMakeLists.txt",
+    group = vim.api.nvim_create_augroup("cmaketools", { clear = true }),
+    pattern = "CMakeLists.txt",
     callback = function()
-      local buf          = vim.api.nvim_get_current_buf()
+      local buf = vim.api.nvim_get_current_buf()
       -- Check if buffer is actually modified, and only if it is modified,
       -- execute the :CMakeGenerate, otherwise return. This is to avoid unnecessary regenerattion
       local buf_modified = vim.api.nvim_buf_get_option(buf, "modified")
       if buf_modified then
-        vim.schedule(
-          function()
-            cmake.generate({ bang = false, fargs = {} },
-              function()
-                -- no function here
-              end)
+        vim.schedule(function()
+          cmake.generate({ bang = false, fargs = {} }, function()
+            -- no function here
           end)
+        end)
       end
       -- print("buffer is not modified... not saving!")
     end,
@@ -784,13 +789,13 @@ end
 -- For win32, we have a command to escape insert mode after proccess extis
 -- because, we want to scroll the buffer output after completion of execution
 local is_win32 = vim.fn.has("win32")
-if (is_win32 == 1) then
+if is_win32 == 1 then
   vim.api.nvim_create_autocmd("TermClose", {
-    group    = "cmaketools",
+    group = "cmaketools",
     callback = function()
       vim.cmd.stopinsert()
       vim.api.nvim_feedkeys("<C-\\><C-n><CR>", "n", false)
-    end
+    end,
   })
 end
 

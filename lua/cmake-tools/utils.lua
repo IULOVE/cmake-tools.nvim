@@ -71,7 +71,7 @@ function utils.execute(executable, opts)
   local set_bufname = "file " .. opts.bufname
   local prefix = string.format("%s %d new", opts.cmake_console_position, opts.cmake_console_size)
 
-  utils.close_cmake_console();
+  utils.close_cmake_console()
 
   -- TODO: Create a common output stream for all cmake related tasks and split running cmake tasks into terminals
   -- This requires support form either 'pleanary.nvim-plenary-job', or 'jobstart()' api
@@ -94,7 +94,7 @@ function utils.execute(executable, opts)
 
   -- print(temp)
   local cmd = prefix .. " | term " .. "cd " .. opts.cmake_launch_path .. " && " .. executable
-  if (opts.cmake_launch_args ~= nil) then
+  if opts.cmake_launch_args ~= nil then
     for _, arg in ipairs(opts.cmake_launch_args) do
       cmd = cmd .. ' "' .. arg .. '"'
     end
@@ -111,7 +111,7 @@ function utils.softlink(src, target)
   local dir_src = Path:new(src)
   local dir_target = Path:new(target)
   if dir_src:exists() and not dir_target:exists() then
-    local cmd = "!cmake -E create_symlink " .. src .. " " .. target;
+    local cmd = "!cmake -E create_symlink " .. src .. " " .. target
     vim.cmd(cmd)
   end
 end
@@ -137,6 +137,24 @@ function utils.deepcopy(orig, copies)
   return copy
 end
 
+---@param env table
+local function merge_env(env)
+  if type(env) ~= "table" then
+    return
+  end
+  for k, v in pairs(env) do
+    ::continue::
+    local arr = vim.split(v, "=")
+    if #arr < 2 then
+      goto continue
+    end
+    local e = os.getenv(arr[1])
+    if e then
+      env[k] = arr[1] .. "=" .. arr[2] .. ";" .. e
+    end
+  end
+end
+
 -- Execute CMake command using job api
 function utils.run(cmd, env, args, opts)
   -- save all
@@ -146,10 +164,12 @@ function utils.run(cmd, env, args, opts)
   if opts.cmake_show_console then
     utils.show_cmake_console(opts.cmake_console_position, opts.cmake_console_size)
   end
-
+  merge_env(env)
   utils.job = Job:new({
     command = cmd,
-    args = next(env) and { "-E", "env", table.concat(env, " "), "cmake", unpack(args) } or args,
+    -- args = next(env) and { "-E", "env", table.concat(env, " "), "cmake", unpack(args) } or args,
+    args = args,
+    env = env,
     cwd = vim.loop.cwd(),
     on_stdout = vim.schedule_wrap(append_to_cmake_console),
     on_stderr = vim.schedule_wrap(append_to_cmake_console),
@@ -178,8 +198,8 @@ function utils.has_active_job()
   end
   utils.error(
     "A CMake task is already running: "
-    .. utils.job.command
-    .. " Stop it before trying to run a new CMake task."
+      .. utils.job.command
+      .. " Stop it before trying to run a new CMake task."
   )
   return false
 end
