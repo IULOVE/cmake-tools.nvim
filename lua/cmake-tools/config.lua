@@ -19,6 +19,7 @@ local Config = {
   kit = nil,
   configure_preset = nil,
   build_preset = nil,
+  enable_user_setting = true,
 }
 
 function Config:new(const)
@@ -27,6 +28,7 @@ function Config:new(const)
   self.__index = self
   self.generate_options = const.cmake_generate_options
   self.build_options = const.cmake_build_options
+  self.enable_user_setting = const.cmake_enable_user_setting
 
   return self
 end

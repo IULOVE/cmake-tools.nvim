@@ -1,5 +1,6 @@
 -- cmake-tools's API
 local has_nvim_dap, dap = pcall(require, "dap")
+local Path = require("plenary.path")
 local utils = require("cmake-tools.utils")
 local Types = require("cmake-tools.types")
 local const = require("cmake-tools.const")
@@ -7,6 +8,9 @@ local Config = require("cmake-tools.config")
 local variants = require("cmake-tools.variants")
 local kits = require("cmake-tools.kits")
 local presets = require("cmake-tools.presets")
+
+local event = require("cmake-tools.event")
+local user = require("cmake-tools.user_setting")
 
 local config = Config:new(const)
 
@@ -16,6 +20,25 @@ local cmake = {}
 function cmake.setup(values)
   const = vim.tbl_deep_extend("force", const, values)
   config = Config:new(const)
+  event.setup()
+  user.load(config)
+end
+
+function cmake.update_build_dir(presets_file)
+  if presets_file and config.configure_preset then
+    local build_directory =
+      presets.get_build_dir(presets.get_preset_by_name(config.configure_preset, "configurePresets"))
+    if build_directory ~= "" then
+      config:update_build_dir(build_directory)
+    end
+    return
+  end
+
+  if const.cmake_build_directory ~= "" then
+    config:update_build_dir(const.cmake_build_directory)
+  else
+    config:update_build_dir(const.cmake_build_directory_prefix .. config.build_type)
+  end
 end
 
 --- Generate build system for this project.
@@ -53,11 +76,7 @@ function cmake.generate(opt, callback)
   if presets_file and config.configure_preset then
     -- if exsist preset file and set configure preset, then
     -- set build directory to the `binaryDir` option of `configurePresets`
-    local build_directory =
-      presets.get_build_dir(presets.get_preset_by_name(config.configure_preset, "configurePresets"))
-    if build_directory ~= "" then
-      config:update_build_dir(build_directory)
-    end
+    cmake.update_build_dir(presets_file)
     config:generate_build_directory()
 
     local args = {
@@ -73,7 +92,9 @@ function cmake.generate(opt, callback)
         if type(callback) == "function" then
           callback()
         end
-        cmake.configure_compile_commands()
+        vim.schedule(function()
+          cmake.configure_compile_commands()
+        end)
       end,
       cmake_console_position = const.cmake_console_position,
       cmake_show_console = const.cmake_show_console,
@@ -102,13 +123,7 @@ function cmake.generate(opt, callback)
   -- cmake kits, if cmake-kits.json doesn't exist, kit_option will
   -- be {env={}, args={}}, so it's okay.
   local kit_option = kits.build_env_and_args(config.kit)
-
-  if const.cmake_build_directory ~= "" then
-    config:update_build_dir(const.cmake_build_directory)
-  else
-    config:update_build_dir(const.cmake_build_directory_prefix .. config.build_type)
-  end
-
+  cmake.update_build_dir(nil)
   config:generate_build_directory()
 
   local args = {
@@ -182,6 +197,8 @@ function cmake.build(opt, callback)
         end)
       end, false)
     end)
+  elseif not config.build_directory then
+    cmake.update_build_dir(nil)
   end
 
   local args
@@ -315,7 +332,7 @@ function cmake.run(opt, callback)
 
   local result = config:get_launch_target()
   local result_code = result.code
-  -- print(Types[result_code])
+  print(Types[result_code])
   if result_code == Types.NOT_CONFIGURED or result_code == Types.CANNOT_FIND_CODEMODEL_FILE then
     -- Configure it
     return cmake.generate({ bang = false, fargs = utils.deepcopy(opt.fargs) }, function()
@@ -612,6 +629,7 @@ function cmake.select_build_target(callback, not_regenerate)
     end
   end
   local targets, display_targets = targets_res.data.targets, targets_res.data.display_targets
+
   vim.ui.select(display_targets, { prompt = "Select build target" }, function(_, idx)
     if not idx then
       return
@@ -649,6 +667,7 @@ function cmake.select_launch_target(callback, not_regenerate)
   end
   local targets, display_targets = targets_res.data.targets, targets_res.data.display_targets
 
+  --这个ui.select弹出会破坏lsp restart
   vim.ui.select(display_targets, { prompt = "Select launch target" }, function(_, idx)
     if not idx then
       return
@@ -708,12 +727,20 @@ function cmake.configure_compile_commands()
       cmake.compile_commands_from_soft_link()
     end
   else
+    cmake.compile_commands_from_copy()
     cmake.compile_commands_from_preset()
   end
 end
 
+function cmake.compile_commands_from_copy()
+  local source = config.build_directory.filename .. "/compile_commands.json"
+  local destination = config.compile_commands_dir .. "/compile_commands.json"
+  local src_file = Path:new(source)
+  src_file:copy({ destination = destination })
+end
+
 function cmake.compile_commands_from_soft_link()
-  if config.build_directory == nil or const.lsp_type ~= nil then
+  if config.build_directory == nil then
     return
   end
 
@@ -721,6 +748,10 @@ function cmake.compile_commands_from_soft_link()
   local destination = vim.loop.cwd() .. "/compile_commands.json"
   if utils.file_exists(source) then
     utils.softlink(source, destination)
+    if not utils.file_exists(destination) then
+      local src_file = Path:new(source)
+      src_file:copy({ destination = destination })
+    end
   end
 end
 
@@ -733,19 +764,27 @@ function cmake.compile_commands_from_preset()
   local clients = vim.lsp.get_active_clients({ name = const.lsp_type })
   for _, client in ipairs(clients) do
     local lspbufs = vim.lsp.get_buffers_by_client_id(client.id)
+    vim.cmd("LspRestart " .. tostring(client.id))
     for _, bufid in ipairs(lspbufs) do
       vim.api.nvim_set_current_buf(bufid)
-      vim.cmd("LspRestart " .. tostring(client.id))
+      vim.cmd("e")
+      -- vim.notify(vim.inspect(vim.lsp.buf_attach_client(bufid, client.id)))
     end
   end
   vim.api.nvim_set_current_buf(buf)
+  -- vim.lsp.codelens.refresh()
 end
 
 function cmake.clangd_on_new_config(new_config)
+  if const.lsp_type == "clangd" then
+    return
+  end
   const.lsp_type = "clangd"
-
   local found = false
-  local arg = "--compile-commands-dir=" .. config.build_directory.filename
+  -- local arg = "--compile-commands-dir=" .. config.build_directory.filename
+  local build_directory_prefix = const.cmake_build_directory_prefix:gsub("[\\/]$", "")
+  config.compile_commands_dir = vim.fn.getcwd(0) .. utils.sep .. build_directory_prefix
+  local arg = "--compile-commands-dir=" .. config.compile_commands_dir
   for _, v in ipairs(new_config.cmd) do
     if string.find(v, "--compile-commands-dir=") ~= nil then
       v = arg

@@ -4,7 +4,7 @@ local kits = {}
 function kits.parse()
   -- helper function to find the config file
   -- returns file path if found, nil otherwise
-  local function findcfg()
+  local function find_kit()
     local get_kit = function(dir)
       local files = vim.fn.readdir(dir)
       local file = nil
@@ -29,7 +29,7 @@ function kits.parse()
 
   local config = nil
 
-  local file = findcfg() -- check for config file
+  local file = find_kit() -- check for config file
   if file then -- if one is found ...
     if file:match(".*%.json") then -- .. and is a json file
       config = vim.fn.json_decode(vim.fn.readfile(file))

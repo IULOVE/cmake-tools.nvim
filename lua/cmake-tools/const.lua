@@ -10,9 +10,10 @@ local const = {
   cmake_console_position = "belowright", -- "bottom", "top"
   cmake_console_size = 10,
   cmake_show_console = "always", -- "always", "only_on_error"
+  cmake_enable_user_setting = true,
   cmake_variants_message = {
     short = { show = true },
-    long = { show = true, max_length = 40 }
+    long = { show = true, max_length = 40 },
   },
   cmake_dap_configuration = {
     name = "cpp",
